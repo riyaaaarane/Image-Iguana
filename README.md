@@ -1,7 +1,5 @@
 # Image Iguana
 
-![Image Iguana Logo](path_to_your_logo.png)
-
 **Image Iguana** is a versatile image processing application designed to help users manage, edit, and enhance their images effortlessly. With a user-friendly interface and powerful features, Image Iguana is suitable for both beginners and professionals alike.
 
 ## Table of Contents
