@@ -2,15 +2,6 @@
 
 **Image Iguana** is a versatile image processing application designed to help users manage, edit, and enhance their images effortlessly. With a user-friendly interface and powerful features, Image Iguana is suitable for both beginners and professionals alike.
 
-## Table of Contents
-
-- [Features](#features)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Contributing](#contributing)
-- [License](#license)
-- [Contact](#contact)
-
 ## Features
 
 - **Image Editing**: Crop, resize, and adjust brightness/contrast.
