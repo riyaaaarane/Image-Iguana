@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ImageIguana - Edit your images online</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark border-bottom border-body" data-bs-theme="dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/"><img src="{{ url_for('static', filename='images/logo.png') }}" alt="ImageIguana Logo" height="50"></a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+                data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false"
+                aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarSupportedContent">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link active" aria-current="page" href="/">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/about">About</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/usage">Usage</a>
+                    </li>
+                </ul>
+                <form class="d-flex" role="search">
+                    <button class="btn btn-outline-success mx-2" type="submit" style="color: white;">Login</button>
+                    <button class="btn btn-outline-success mx-2" type="submit" style="color: white;">Sign-up</button>
+                </form>
+            </div>
+        </div>
+    </nav>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <strong>{{ message | safe}}</strong>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endfor %}
+    {% endif %}
+    {% endwith %}
+
+    <div class="container my-4">
+        <h1 class="fs-3 text">ImageIguana - Edit your Image online!</h1>
+
+        <form action="/edit" method="post" enctype="multipart/form-data">
+            <div class="mb-3">
+                <label for="formFile" class="form-label my-2">Upload an image to edit</label>
+                <input class="form-control" type="file" name="file" id="formFile">
+            </div>
+
+            <!-- Dropdown for Format Conversions -->
+            <div class="form-floating mb-3">
+                <select name="format_conversion" class="form-select" id="formatConversionSelect"
+                    aria-label="Format Conversion Select">
+                    <option selected>Choose format conversion</option>
+                    <option value="cpng">Convert to PNG</option>
+                    <option value="cjpg">Convert to JPG</option>
+                    <option value="cjpeg">Convert to JPEG</option>
+                    <option value="cwebp">Convert to WEBP</option>
+                </select>
+                <label for="formatConversionSelect">Select Format Conversion</label>
+            </div>
+
+            <!-- Dropdown for Image Processing -->
+            <div class="form-floating mb-3">
+                <select name="image_processing" class="form-select" id="imageProcessingSelect"
+                    aria-label="Image Processing Select">
+                    <option selected>Choose image processing option</option>
+                    <option value="cgray">Convert to Grayscale</option>
+                    <option value="histeq">B&W - Contrast + Grain</option>
+                    <option value="blur">Blur Image</option>
+                    <option value="canny">Edge Image</option>
+                    <option value="rotate">Rotate Clockwise</option>
+                    <option value="sharpen">Sharpen Image</option>
+                </select>
+                <label for="imageProcessingSelect">Select Image Processing Option</label>
+            </div>
+
+            <button type="submit" class="btn btn-success my-4">Submit</button>
+        </form>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
+        crossorigin="anonymous"></script>
+</body>
+
+</html>
