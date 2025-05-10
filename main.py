@@ -19,7 +19,6 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 def processImage(filename, format_conversion=None, image_processing=None):
     print(f"Format Conversion: {format_conversion}, Image Processing: {image_processing}, Filename: {filename}")
     img = cv2.imread(f"uploads/{filename}")
-    print(image_processing)
     imgProcessed = img
     file_base = filename.rsplit('.', 1)[0]
     # Handle image processing
@@ -28,7 +27,6 @@ def processImage(filename, format_conversion=None, image_processing=None):
             case "cgray":
                 imgProcessed = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
                 newFilename = f"static/{filename}"
-                print("Grayed")
                 cv2.imwrite(newFilename, imgProcessed)
             case "histeq":
                 imgGray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -47,7 +45,6 @@ def processImage(filename, format_conversion=None, image_processing=None):
                 imgProcessed = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
                 newFilename = f"static/{filename.split('.')[0]}_rotated.png"
                 cv2.imwrite(newFilename, imgProcessed)
-                print("Image Rotated and saved to", newFilename)
             case "sharpen":
                 kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
                 imgProcessed = cv2.filter2D(img, -1, kernel)
@@ -71,7 +68,6 @@ def processImage(filename, format_conversion=None, image_processing=None):
     # --- Final output filename ---
     newFilename = f"static/{file_base}_processed.{new_format}"
     cv2.imwrite(newFilename, imgProcessed)
-    print(f"Saved: {newFilename}")
     return newFilename
 
 @app.route("/")
@@ -101,7 +97,6 @@ def edit():
             filename = secure_filename(file.filename)
             file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
             new = processImage(filename, format_conversion=format_conversion, image_processing=image_processing)
-            print(new)
             flash(f"Your image has been processed and is available <a href='/{new}?t={int(time.time())}' target='_blank'>here!</a>")
             return render_template("index.html")
         else:
