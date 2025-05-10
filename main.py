@@ -1,8 +1,38 @@
-from flask import Flask, render_template, request, flash
+from flask import Flask, render_template, request, flash, redirect, url_for, send_file
 from werkzeug.utils import secure_filename
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import generate_password_hash, check_password_hash
 import cv2
 import os
 import numpy as np
+
+app = Flask(__name__)
+app.secret_key = "your-secret-key-here"  # Change this to a secure secret key
+app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+db = SQLAlchemy(app)
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(128))
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
 
 def allowed_file(filename):
     return '.' in filename and \
@@ -10,10 +40,6 @@ def allowed_file(filename):
 
 UPLOAD_FOLDER = 'uploads'
 ALLOWED_EXTENSIONS = {'webp', 'png', 'jpg', 'jpeg', 'gif'}
-
-app = Flask(__name__)
-app.secret_key = "secret key"
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 def processImage(filename, format_conversion=None, image_processing=None):
     print(f"Format Conversion: {format_conversion}, Image Processing: {image_processing}, Filename: {filename}")
@@ -79,13 +105,69 @@ def processImage(filename, format_conversion=None, image_processing=None):
 
 @app.route("/")
 def home():
+    if not current_user.is_authenticated:
+        return redirect(url_for('login'))
     return render_template("index.html")
 
+@app.route("/login", methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('home'))
+    
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        user = User.query.filter_by(username=username).first()
+        
+        if user and user.check_password(password):
+            login_user(user)
+            return redirect(url_for('home'))
+        else:
+            flash('Invalid username or password')
+    
+    return render_template('login.html')
+
+@app.route("/signup", methods=['GET', 'POST'])
+def signup():
+    if current_user.is_authenticated:
+        return redirect(url_for('home'))
+    
+    if request.method == 'POST':
+        username = request.form.get('username')
+        email = request.form.get('email')
+        password = request.form.get('password')
+        
+        if User.query.filter_by(username=username).first():
+            flash('Username already exists')
+            return redirect(url_for('signup'))
+        
+        if User.query.filter_by(email=email).first():
+            flash('Email already registered')
+            return redirect(url_for('signup'))
+        
+        user = User(username=username, email=email)
+        user.set_password(password)
+        db.session.add(user)
+        db.session.commit()
+        
+        flash('Registration successful! Please login.')
+        return redirect(url_for('login'))
+    
+    return render_template('signup.html')
+
+@app.route("/logout")
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
+
 @app.route("/about")
+@login_required
 def about():
     return render_template("about.html", title="About")
 
 @app.route("/edit", methods=["GET", "POST"])
+@login_required
 def edit():
     if request.method == 'POST':
         format_conversion = request.form.get("format_conversion")
@@ -104,9 +186,21 @@ def edit():
         elif file and allowed_file(file.filename):
             filename = secure_filename(file.filename)
             file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-            new = processImage(filename, format_conversion, image_processing)
-            flash(f"Your image has been processed and is available <a href='/{new}' target='_blank'>here!</a>")
-            return render_template("index.html")
+            processed_file = processImage(filename, format_conversion, image_processing)
+            
+            if processed_file:
+                # Get the filename from the processed file path
+                download_filename = os.path.basename(processed_file)
+                # Send the file for download
+                return send_file(
+                    processed_file,
+                    as_attachment=True,
+                    download_name=download_filename,
+                    mimetype='image/png'
+                )
+            else:
+                flash('Error processing image')
+                return render_template("error.html")
         else:
             flash('File type not allowed. Please upload an image file.')
             return render_template("error.html")
@@ -114,8 +208,11 @@ def edit():
     return render_template("index.html")
 
 @app.route("/usage")
+@login_required
 def usage():
     return render_template("usage.html", title="Usage")
 
 if __name__ == "__main__":
+    with app.app_context():
+        db.create_all()
     app.run(debug=True)  # Can specify the port too app.run(debug=True, port=5001)
