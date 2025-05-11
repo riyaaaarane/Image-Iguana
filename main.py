@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, flash
+from flask import Flask, render_template, request, flash,send_from_directory
 from werkzeug.utils import secure_filename
 import cv2
 import os
@@ -105,13 +105,25 @@ def edit():
             filename = secure_filename(file.filename)
             file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
             new = processImage(filename, format_conversion, image_processing)
-            flash(f"Your image has been processed and is available <a href='/{new}' target='_blank'>here!</a>")
-            return render_template("index.html")
-        else:
-            flash('File type not allowed. Please upload an image file.')
-            return render_template("error.html")
+            if new:
+                image_name = new.split('/')[-1]
+                flash(f"Your image has been processed and is available "
+                      f"<a href='/static/{image_name}' target='_blank'>View Image</a> or "
+                      f"<a href='/download/{image_name}' target='_blank'>Download</a>")
+            else:
+                flash('Image processing failed. Please try again.')
+                return render_template("error.html")
+
+    else:
+        flash('File type not allowed. Please upload an image file.')
+        return render_template("error.html")
             
     return render_template("index.html")
+
+# Download route
+@app.route('/download/<path:filename>')
+def download_file(filename):
+    return send_from_directory('static', filename, as_attachment=True)
 
 @app.route("/usage")
 def usage():
