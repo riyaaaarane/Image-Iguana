@@ -1,7 +1,20 @@
 {% extends "layout.html" %}
 
 {% block content %}
+
 <div class="container my-4">
+
+    <!-- Flash messages - KEEP THIS BLOCK, it's correct -->
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        {% for message in messages %}
+          <div class="alert alert-info" role="alert">
+            {{ message|safe }}
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
     <h1 class="fs-3 text">ImageIguana - Edit your Image online!</h1>
 
     <form action="/edit" method="post" enctype="multipart/form-data">

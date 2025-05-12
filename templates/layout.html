@@ -47,13 +47,7 @@
     </nav>
 
     <div class="container my-4">
-        {% with messages = get_flashed_messages() %}
-            {% if messages %}
-                {% for message in messages %}
-                    <div class="alert alert-info">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
+        
         
         <h1 class="fs-3">{{title}}</h1>
         {% block content %}

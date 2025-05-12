@@ -1,8 +1,9 @@
-from flask import Flask, render_template, request, flash, redirect, url_for, send_file
+from flask import Flask, render_template, request, flash, redirect, url_for, send_file, send_from_directory
 from werkzeug.utils import secure_filename
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
+from markupsafe import Markup
 import cv2
 import os
 import numpy as np
@@ -173,39 +174,43 @@ def edit():
         format_conversion = request.form.get("format_conversion")
         image_processing = request.form.get("image_processing")
 
-        # Check if the post request has the file part
         if 'file' not in request.files:
             flash('No file part')
             return render_template("error.html")
-        
+
         file = request.files['file']
-        # If the user does not select a file, the browser submits an empty file without a filename.
+
         if file.filename == '':
             flash('No selected file')
             return render_template("error.html")
-        elif file and allowed_file(file.filename):
+
+        if file and allowed_file(file.filename):
             filename = secure_filename(file.filename)
             file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-            processed_file = processImage(filename, format_conversion, image_processing)
-            
-            if processed_file:
-                # Get the filename from the processed file path
-                download_filename = os.path.basename(processed_file)
-                # Send the file for download
-                return send_file(
-                    processed_file,
-                    as_attachment=True,
-                    download_name=download_filename,
-                    mimetype='image/png'
-                )
+            new = processImage(filename, format_conversion, image_processing)
+
+            if new:
+                image_name = new.split('/')[-1]
+                flash(Markup(
+                    f"Your image has been processed and is available "
+                    f"<a href='/static/{image_name}' target='_blank'>View Image</a> or "
+                    f"<a href='/download/{image_name}' target='_blank'>Download</a>"
+                ))
+                return redirect(url_for("home"))
             else:
-                flash('Error processing image')
+                flash('Image processing failed. Please try again.')
                 return render_template("error.html")
         else:
             flash('File type not allowed. Please upload an image file.')
             return render_template("error.html")
-            
-    return render_template("index.html")
+
+    return redirect(url_for("home"))
+
+
+# Download route
+@app.route('/download/<path:filename>')
+def download_file(filename):
+    return send_from_directory('static', filename, as_attachment=True)
 
 @app.route("/usage")
 @login_required
