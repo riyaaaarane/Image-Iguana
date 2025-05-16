@@ -2,12 +2,13 @@
 
 {% block content %}
 <div class="container my-4">
-    <h1 class="fs-3 text">ImageIguana - Edit your Image online!</h1>
+    <h1 class="fs-3 text">ImageIguana - Edit your Images online!</h1>
 
     <form action="/edit" method="post" enctype="multipart/form-data">
         <div class="mb-3">
-            <label for="formFile" class="form-label my-2">Upload an image to edit</label>
-            <input class="form-control" type="file" name="file" id="formFile">
+            <label for="formFile" class="form-label my-2">Upload image(s) to edit</label>
+            <input class="form-control" type="file" name="file" id="formFile" multiple accept=".jpg, .jpeg, .png, .gif, .webp">
+            <div class="form-text text-muted">You can select multiple files by holding Ctrl (or Cmd on Mac) while clicking, or by dragging multiple files.</div>
         </div>
 
         <!-- Dropdown for Format Conversions -->
@@ -37,6 +38,8 @@
             </select>
             <label for="imageProcessingSelect">Select Image Processing Option</label>
         </div>
+
+        
 
         <button type="submit" class="btn btn-success my-4">Submit</button>
     </form>

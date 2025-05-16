@@ -6,17 +6,25 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import cv2
 import os
 import numpy as np
+import zipfile
+import tempfile
+import shutil
 
 app = Flask(__name__)
 app.secret_key = "your-secret-key-here"  # Change this to a secure secret key
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB max upload size
 
 db = SQLAlchemy(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+
+# Allowed file extensions and upload folder
+ALLOWED_EXTENSIONS = {'webp', 'png', 'jpg', 'jpeg', 'gif'}
+UPLOAD_FOLDER = 'uploads'
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -36,16 +44,16 @@ def load_user(user_id):
 
 def allowed_file(filename):
     return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS 
-
-UPLOAD_FOLDER = 'uploads'
-ALLOWED_EXTENSIONS = {'webp', 'png', 'jpg', 'jpeg', 'gif'}
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def processImage(filename, format_conversion=None, image_processing=None):
     print(f"Format Conversion: {format_conversion}, Image Processing: {image_processing}, Filename: {filename}")
     img = cv2.imread(f"uploads/{filename}")
+    
+    if img is None:
+        print(f"Failed to load image: uploads/{filename}")
+        return None
 
-    # Handle format conversions
     if format_conversion:
         match format_conversion:
             case "cwebp":
@@ -65,7 +73,6 @@ def processImage(filename, format_conversion=None, image_processing=None):
                 cv2.imwrite(newFilename, img)
                 return newFilename
 
-    # Handle image processing
     if image_processing:
         match image_processing:
             case "cgray":
@@ -173,40 +180,85 @@ def edit():
         format_conversion = request.form.get("format_conversion")
         image_processing = request.form.get("image_processing")
 
-        # Check if the post request has the file part
         if 'file' not in request.files:
-            flash('No file part')
-            return render_template("error.html")
+            flash('No file part in request')
+            return redirect(url_for('edit'))
         
-        file = request.files['file']
-        # If the user does not select a file, the browser submits an empty file without a filename.
-        if file.filename == '':
-            flash('No selected file')
-            return render_template("error.html")
-        elif file and allowed_file(file.filename):
-            filename = secure_filename(file.filename)
-            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-            processed_file = processImage(filename, format_conversion, image_processing)
-            
-            if processed_file:
-                # Get the filename from the processed file path
-                download_filename = os.path.basename(processed_file)
-                # Send the file for download
-                return send_file(
-                    processed_file,
-                    as_attachment=True,
-                    download_name=download_filename,
-                    mimetype='image/png'
-                )
-            else:
-                flash('Error processing image')
-                return render_template("error.html")
+        files = request.files.getlist('file')
+        
+        if len(files) == 0 or files[0].filename == '':
+            flash('No files selected for upload')
+            return redirect(url_for('edit'))
+        
+        processed_files = []
+        error_files = []
+        
+        for file in files:
+            try:
+                if file and allowed_file(file.filename):
+                    filename = secure_filename(file.filename)
+                    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                    file.save(file_path)
+                    
+                    processed_file = processImage(filename, format_conversion, image_processing)
+                    
+                    if processed_file:
+                        processed_files.append(processed_file)
+                    else:
+                        error_files.append(f"{filename} (processing failed)")
+                else:
+                    error_files.append(f"{file.filename} (invalid type)")
+            except Exception as e:
+                error_files.append(f"{file.filename} (error: {str(e)}")
+        
+        if error_files:
+            flash(f"Errors with {len(error_files)} file(s): {', '.join(error_files[:3])}{'...' if len(error_files) > 3 else ''}")
+        
+        if not processed_files:
+            flash('No files were processed successfully')
+            return redirect(url_for('edit'))
+        
+        if len(processed_files) == 1:
+            download_filename = os.path.basename(processed_files[0])
+            return send_file(
+                processed_files[0],
+                as_attachment=True,
+                download_name=download_filename,
+                mimetype='image/png'
+            )
         else:
-            flash('File type not allowed. Please upload an image file.')
-            return render_template("error.html")
+            try:
+                temp_dir = tempfile.mkdtemp()
+                zip_path = os.path.join(temp_dir, 'processed_images.zip')
+                
+                with zipfile.ZipFile(zip_path, 'w') as zipf:
+                    for file_path in processed_files:
+                        zipf.write(file_path, os.path.basename(file_path))
+                
+                # Create a cleanup function
+                def cleanup():
+                    try:
+                        shutil.rmtree(temp_dir)
+                    except Exception as e:
+                        print(f"Cleanup error: {e}")
+                
+                # Send file with callback for cleanup
+                response = send_file(
+                    zip_path,
+                    as_attachment=True,
+                    download_name='processed_images.zip',
+                    mimetype='application/zip'
+                )
+                
+                # Set callback to run after response is sent
+                response.call_on_close(cleanup)
+                return response
+                
+            except Exception as e:
+                flash(f'Error creating zip file: {str(e)}')
+                return redirect(url_for('edit'))
             
     return render_template("index.html")
-
 @app.route("/usage")
 @login_required
 def usage():
@@ -215,4 +267,6 @@ def usage():
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
-    app.run(debug=True)  # Can specify the port too app.run(debug=True, port=5001)
+        os.makedirs('static', exist_ok=True)
+        os.makedirs('uploads', exist_ok=True)
+    app.run(debug=True)
