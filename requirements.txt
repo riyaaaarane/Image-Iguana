@@ -1,6 +1,6 @@
-Flask==2.0.1           # For web application framework
-Werkzeug==2.0.1        # For utilities including secure filename handling
-opencv-python==4.5.3.56   # For image processing capabilities
-numpy==1.21.2          # For numerical operations
-Flask-Login==0.5.0
-Flask-SQLAlchemy==2.5.1
+Flask
+Werkzeug
+opencv-python
+numpy
+Flask-Login
+Flask-SQLAlchemy
