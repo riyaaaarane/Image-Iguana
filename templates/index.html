@@ -5,6 +5,7 @@
     <h1 class="fs-3 text">ImageIguana - Edit your Image online!</h1>
 
     <form action="/edit" method="post" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="mb-3">
             <label for="formFile" class="form-label my-2">Upload an image to edit</label>
             <input class="form-control" type="file" name="file" id="formFile">

@@ -17,6 +17,7 @@
                         {% endif %}
                     {% endwith %}
                     <form method="POST" action="{{ url_for('signup') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="form-group mb-3">
                             <label for="username">Username</label>
                             <input type="text" class="form-control" id="username" name="username" required>
