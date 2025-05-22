@@ -9,8 +9,11 @@ import numpy as np
 import zipfile
 import tempfile
 import shutil
+from flask_wtf.csrf import CSRFProtect
+
 
 app = Flask(__name__)
+csrf = CSRFProtect(app)
 app.secret_key = "your-secret-key-here"  # Change this to a secure secret key
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
@@ -40,7 +43,8 @@ class User(UserMixin, db.Model):
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return db.session.get(User, int(user_id))
+
 
 def allowed_file(filename):
     return '.' in filename and \
