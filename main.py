@@ -1,27 +1,84 @@
-from flask import Flask, render_template, request, flash
+from flask import Flask, render_template, request, flash, redirect, url_for, send_file
 from werkzeug.utils import secure_filename
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import generate_password_hash, check_password_hash
 import cv2
 import os
 import numpy as np
+import zipfile
+import tempfile
+import shutil
 import time
+
+from flask_wtf.csrf import CSRFProtect
+
+
+app = Flask(__name__)
+csrf = CSRFProtect(app)
+app.secret_key = "your-secret-key-here"  # Change this to a secure secret key
+app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB max upload size
+
+db = SQLAlchemy(app)
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+# Allowed file extensions and upload folder
+ALLOWED_EXTENSIONS = {'webp', 'png', 'jpg', 'jpeg', 'gif'}
+UPLOAD_FOLDER = 'uploads'
+
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(128))
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+@login_manager.user_loader
+def load_user(user_id):
+    return db.session.get(User, int(user_id))
+
 
 def allowed_file(filename):
     return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS 
-
-UPLOAD_FOLDER = 'uploads'
-ALLOWED_EXTENSIONS = {'webp', 'png', 'jpg', 'jpeg', 'gif'}
-
-app = Flask(__name__)
-app.secret_key = "secret key"
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def processImage(filename, format_conversion=None, image_processing=None):
     print(f"Format Conversion: {format_conversion}, Image Processing: {image_processing}, Filename: {filename}")
     img = cv2.imread(f"uploads/{filename}")
-    imgProcessed = img
-    file_base = filename.rsplit('.', 1)[0]
-    # Handle image processing
+    
+    if img is None:
+        print(f"Failed to load image: uploads/{filename}")
+        return None
+
+    if format_conversion:
+        match format_conversion:
+            case "cwebp":
+                newFilename = f"static/{filename.split('.')[0]}.webp"
+                cv2.imwrite(newFilename, img)
+                return newFilename
+            case "cpng":
+                newFilename = f"static/{filename.split('.')[0]}.png"
+                cv2.imwrite(newFilename, img)
+                return newFilename
+            case "cjpg":
+                newFilename = f"static/{filename.split('.')[0]}.jpg"
+                cv2.imwrite(newFilename, img)
+                return newFilename
+            case "cjpeg":
+                newFilename = f"static/{filename.split('.')[0]}.jpeg"
+                cv2.imwrite(newFilename, img)
+                return newFilename
+
     if image_processing:
         match image_processing:
             case "cgray":
@@ -72,42 +129,160 @@ def processImage(filename, format_conversion=None, image_processing=None):
 
 @app.route("/")
 def home():
+    if not current_user.is_authenticated:
+        return redirect(url_for('login'))
     return render_template("index.html")
 
+@app.route("/login", methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('home'))
+    
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        user = User.query.filter_by(username=username).first()
+        
+        if user and user.check_password(password):
+            login_user(user)
+            return redirect(url_for('home'))
+        else:
+            flash('Invalid username or password')
+    
+    return render_template('login.html')
+
+@app.route("/signup", methods=['GET', 'POST'])
+def signup():
+    if current_user.is_authenticated:
+        return redirect(url_for('home'))
+    
+    if request.method == 'POST':
+        username = request.form.get('username')
+        email = request.form.get('email')
+        password = request.form.get('password')
+        
+        if User.query.filter_by(username=username).first():
+            flash('Username already exists')
+            return redirect(url_for('signup'))
+        
+        if User.query.filter_by(email=email).first():
+            flash('Email already registered')
+            return redirect(url_for('signup'))
+        
+        user = User(username=username, email=email)
+        user.set_password(password)
+        db.session.add(user)
+        db.session.commit()
+        
+        flash('Registration successful! Please login.')
+        return redirect(url_for('login'))
+    
+    return render_template('signup.html')
+
+@app.route("/logout")
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
+
 @app.route("/about")
+@login_required
 def about():
     return render_template("about.html", title="About")
 
 @app.route("/edit", methods=["GET", "POST"])
+@login_required
 def edit():
     if request.method == 'POST':
         format_conversion = request.form.get("format_conversion")
         image_processing = request.form.get("image_processing")
-        # Check if the post request has the file part
         if 'file' not in request.files:
-            flash('No file part')
-            return render_template("error.html")
+            flash('No file part in request')
+            return redirect(url_for('edit'))
         
-        file = request.files['file']
-        # If the user does not select a file, the browser submits an empty file without a filename.
-        if file.filename == '':
-            flash('No selected file')
-            return render_template("error.html")
-        elif file and allowed_file(file.filename):
-            filename = secure_filename(file.filename)
-            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-            new = processImage(filename, format_conversion=format_conversion, image_processing=image_processing)
-            flash(f"Your image has been processed and is available <a href='/{new}?t={int(time.time())}' target='_blank'>here!</a>")
-            return render_template("index.html")
+        files = request.files.getlist('file')
+        
+        if len(files) == 0 or files[0].filename == '':
+            flash('No files selected for upload')
+            return redirect(url_for('edit'))
+        
+        processed_files = []
+        error_files = []
+        
+        for file in files:
+            try:
+                if file and allowed_file(file.filename):
+                    filename = secure_filename(file.filename)
+                    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                    file.save(file_path)
+                    
+                    processed_file = processImage(filename, format_conversion, image_processing)
+                    
+                    if processed_file:
+                        processed_files.append(processed_file)
+                    else:
+                        error_files.append(f"{filename} (processing failed)")
+                else:
+                    error_files.append(f"{file.filename} (invalid type)")
+            except Exception as e:
+                error_files.append(f"{file.filename} (error: {str(e)}")
+        
+        if error_files:
+            flash(f"Errors with {len(error_files)} file(s): {', '.join(error_files[:3])}{'...' if len(error_files) > 3 else ''}")
+        
+        if not processed_files:
+            flash('No files were processed successfully')
+            return redirect(url_for('edit'))
+        
+        if len(processed_files) == 1:
+            download_filename = os.path.basename(processed_files[0])
+            return send_file(
+                processed_files[0],
+                as_attachment=True,
+                download_name=download_filename,
+                mimetype='image/png'
+            )
         else:
-            flash('File type not allowed. Please upload an image file.')
-            return render_template("error.html")
+            try:
+                temp_dir = tempfile.mkdtemp()
+                zip_path = os.path.join(temp_dir, 'processed_images.zip')
+                
+                with zipfile.ZipFile(zip_path, 'w') as zipf:
+                    for file_path in processed_files:
+                        zipf.write(file_path, os.path.basename(file_path))
+                
+                # Create a cleanup function
+                def cleanup():
+                    try:
+                        shutil.rmtree(temp_dir)
+                    except Exception as e:
+                        print(f"Cleanup error: {e}")
+                
+                # Send file with callback for cleanup
+                response = send_file(
+                    zip_path,
+                    as_attachment=True,
+                    download_name='processed_images.zip',
+                    mimetype='application/zip'
+                )
+                
+                # Set callback to run after response is sent
+                response.call_on_close(cleanup)
+                return response
+                
+            except Exception as e:
+                flash(f'Error creating zip file: {str(e)}')
+                return redirect(url_for('edit'))
             
     return render_template("index.html")
-
 @app.route("/usage")
+@login_required
 def usage():
     return render_template("usage.html", title="Usage")
 
 if __name__ == "__main__":
-    app.run(debug=True)  # Can specify the port too app.run(debug=True, port=5001)
+    with app.app_context():
+        db.create_all()
+        os.makedirs('static', exist_ok=True)
+        os.makedirs('uploads', exist_ok=True)
+    app.run(debug=True)

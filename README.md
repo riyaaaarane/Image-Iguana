@@ -22,6 +22,7 @@ To install Image Iguana, follow these steps:
    ```
    cd image-iguana
    ```
+
 3. Install the required dependencies:
    ```
    pip install -r requirements.txt
@@ -31,3 +32,33 @@ To install Image Iguana, follow these steps:
    python main.py
    ```
 
+To install Image Iguana using Docker, follow these steps:
+1. Check if you have Docker installed, if not install it from [here](https://docs.docker.com/get-docker/).
+   ```bash
+   docker --version
+   ```
+2. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/image-iguana.git
+   ```
+3. Navigate to the project directory:
+   ```bash
+   cd image-iguana
+   ```
+4. Build the Docker image:
+   ```bash
+   docker build -t image-iguana .
+   ```
+5. Run the Docker container:
+   ```bash
+   docker run -it --rm -p 8080:8080 image-iguana
+   ```
+      
+
+## Fixes
+
+1. For Linux you might need to install libGL1 in your system required for OpenCV:
+   ```
+   sudo apt update
+   sudo apt install libgl1
+   ```
