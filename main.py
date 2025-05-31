@@ -1,8 +1,9 @@
-from flask import Flask, render_template, request, flash, redirect, url_for, send_file
+from flask import Flask, render_template, request, flash, redirect, url_for, send_file, send_from_directory
 from werkzeug.utils import secure_filename
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
+from markupsafe import Markup
 import cv2
 import os
 import numpy as np
@@ -196,6 +197,7 @@ def edit():
     if request.method == 'POST':
         format_conversion = request.form.get("format_conversion")
         image_processing = request.form.get("image_processing")
+
         if 'file' not in request.files:
             flash('No file part in request')
             return redirect(url_for('edit'))
