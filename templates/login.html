@@ -17,14 +17,21 @@
                         {% endif %}
                     {% endwith %}
                     <form method="POST" action="{{ url_for('login') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="form-group mb-3">
                             <label for="username">Username</label>
                             <input type="text" class="form-control" id="username" name="username" required>
                         </div>
                         <div class="form-group mb-3">
                             <label for="password">Password</label>
-                            <input type="password" class="form-control" id="password" name="password" required>
+                            <div class="input-group">
+                                <input type="password" class="form-control" id="password" name="password" required>
+                                <button class="btn btn-outline-secondary" type="button" tabindex="-1" style="border-left:0; background:transparent;" onclick="togglePassword('password', this)">
+                                    <i class="bi bi-eye" id="togglePasswordIcon"></i>
+                                </button>
+                            </div>
                         </div>
+
                         <div class="d-grid gap-2">
                             <button type="submit" class="btn btn-primary">Login</button>
                         </div>
@@ -37,4 +44,34 @@
         </div>
     </div>
 </div>
-{% endblock %} 
+<script>
+function togglePassword(inputId, btnElem) {
+    // Support both button and icon click
+    let icon;
+    if (btnElem.tagName === 'I') {
+        icon = btnElem;
+        btnElem = btnElem.parentElement;
+    } else {
+        icon = btnElem.querySelector('i');
+    }
+    const input = document.getElementById(inputId);
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.classList.remove('bi-eye');
+        icon.classList.add('bi-eye-slash');
+    } else {
+        input.type = 'password';
+        icon.classList.remove('bi-eye-slash');
+        icon.classList.add('bi-eye');
+    }
+}
+// Also allow clicking the icon directly
+const toggleBtn = document.querySelector('.bi-eye');
+if (toggleBtn) {
+    toggleBtn.addEventListener('click', function(e) {
+        togglePassword('password', this);
+        e.stopPropagation();
+    });
+}
+</script>
+{% endblock %}

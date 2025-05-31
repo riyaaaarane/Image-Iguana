@@ -1,14 +1,30 @@
 {% extends "layout.html" %}
 
 {% block content %}
+
 <div class="container my-4">
+
+    <!-- Flash messages - KEEP THIS BLOCK, it's correct -->
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        {% for message in messages %}
+          <div class="alert alert-info" role="alert">
+            {{ message|safe }}
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
     <h1 class="fs-3 text">ImageIguana - Edit your Image online!</h1>
 
     <form action="/edit" method="post" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="mb-3">
-            <label for="formFile" class="form-label my-2">Upload an image to edit</label>
-            <input class="form-control" type="file" name="file" id="formFile" onchange="previewImage(event)">
+
+            <label for="formFile" class="form-label my-2">Upload image(s) to edit</label>
+            <input class="form-control" type="file" name="file" id="formFile" onchange="previewImage(event)"  multiple accept=".jpg, .jpeg, .png, .gif, .webp">
             <img id="preview" src="#" alt="Image Preview" style="display:none; max-width:300px; margin-top:10px;"/>
+            <div class="form-text text-muted">You can select multiple files by holding Ctrl (or Cmd on Mac) while clicking, or by dragging multiple files.</div>
         </div>
 
         <!-- Dropdown for Format Conversions -->
@@ -38,6 +54,8 @@
             </select>
             <label for="imageProcessingSelect">Select Image Processing Option</label>
         </div>
+
+        
 
         <button type="submit" class="btn btn-success my-4">Submit</button>
     </form>

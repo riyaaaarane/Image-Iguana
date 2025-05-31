@@ -1,26 +1,40 @@
-from flask import Flask, render_template, request, flash, redirect, url_for, send_file
+from flask import Flask, render_template, request, flash, redirect, url_for, send_file, send_from_directory
 from werkzeug.utils import secure_filename
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
+from markupsafe import Markup
 import cv2
 import os
 import numpy as np
+import zipfile
+import tempfile
+import shutil
+import time
+
+from flask_wtf.csrf import CSRFProtect
+
 import base64
 from PIL import Image
 from io import BytesIO
 from flask import after_this_request
 
 app = Flask(__name__)
+csrf = CSRFProtect(app)
 app.secret_key = "your-secret-key-here"  # Change this to a secure secret key
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB max upload size
 
 db = SQLAlchemy(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+
+# Allowed file extensions and upload folder
+ALLOWED_EXTENSIONS = {'webp', 'png', 'jpg', 'jpeg', 'gif'}
+UPLOAD_FOLDER = 'uploads'
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -36,18 +50,40 @@ class User(UserMixin, db.Model):
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return db.session.get(User, int(user_id))
+
 
 def allowed_file(filename):
     return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS 
-
-UPLOAD_FOLDER = 'uploads'
-ALLOWED_EXTENSIONS = {'webp', 'png', 'jpg', 'jpeg', 'gif'}
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def processImage(filename, format_conversion=None, image_processing=None):
     print(f"Format Conversion: {format_conversion}, Image Processing: {image_processing}, Filename: {filename}")
     img = cv2.imread(f"uploads/{filename}")
+    
+    if img is None:
+        print(f"Failed to load image: uploads/{filename}")
+        return None
+
+    if format_conversion:
+        match format_conversion:
+            case "cwebp":
+                newFilename = f"static/{filename.split('.')[0]}.webp"
+                cv2.imwrite(newFilename, img)
+                return newFilename
+            case "cpng":
+                newFilename = f"static/{filename.split('.')[0]}.png"
+                cv2.imwrite(newFilename, img)
+                return newFilename
+            case "cjpg":
+                newFilename = f"static/{filename.split('.')[0]}.jpg"
+                cv2.imwrite(newFilename, img)
+                return newFilename
+            case "cjpeg":
+                newFilename = f"static/{filename.split('.')[0]}.jpeg"
+                cv2.imwrite(newFilename, img)
+                return newFilename
+
 
     output_dir = "static/uploads"
     if not os.path.exists(output_dir):
@@ -62,21 +98,59 @@ def processImage(filename, format_conversion=None, image_processing=None):
             case "cgray":
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
                 base += "_gray"
+                imgProcessed = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                newFilename = f"static/{filename}"
+                cv2.imwrite(newFilename, imgProcessed)
             case "histeq":
+                imgGray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                imgProcessed = cv2.equalizeHist(imgGray)
+                newFilename = f"static/{filename.split('.')[0]}_histeq.png"
+                cv2.imwrite(newFilename, imgProcessed)
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
                 img = cv2.equalizeHist(img)
                 base += "_histeq"
             case "blur":
+                imgProcessed = cv2.GaussianBlur(img, (5, 5), 0)
+                newFilename = f"static/{filename.split('.')[0]}_blurred.png"
+                cv2.imwrite(newFilename, imgProcessed)
                 img = cv2.GaussianBlur(img, (5, 5), 0)
                 base += "_blurred"
             case "canny":
+                imgProcessed = cv2.Canny(img, 100, 200)
+                newFilename = f"static/{filename.split('.')[0]}_edges.png"
+                cv2.imwrite(newFilename, imgProcessed)
                 img = cv2.Canny(img, 100, 200)
                 base += "_edges"
             case "rotate":
                 img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
                 base += "_rotated"
+                imgProcessed = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
+                newFilename = f"static/{filename.split('.')[0]}_rotated.png"
+                cv2.imwrite(newFilename, imgProcessed)
             case "sharpen":
                 kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
+                imgProcessed = cv2.filter2D(img, -1, kernel)
+                newFilename = f"static/{filename.split('.')[0]}_sharpened.png"
+                cv2.imwrite(newFilename, imgProcessed)
+
+    file_format = filename.rsplit('.', 1)[1].lower()
+    new_format = file_format
+
+    # Handle Format Conversions Simultaneously also if required by user
+    if format_conversion:
+        if format_conversion == "cwebp":
+            new_format= "webp"
+        elif format_conversion == "cpng":
+            new_format = "png"
+        elif format_conversion == "cjpg":
+            new_format = "jpg"
+        elif format_conversion == "cjpeg":
+            new_format = "jpeg"
+
+    # --- Final output filename ---
+    newFilename = f"static/{file_base}_processed.{new_format}"
+    cv2.imwrite(newFilename, imgProcessed)
+    return newFilename
                 img = cv2.filter2D(img, -1, kernel)
                 base += "_sharpened"
 
@@ -185,11 +259,83 @@ def edit():
         format_conversion = request.form.get("format_conversion")
         image_processing = request.form.get("image_processing")
 
-        # Check if the post request has the file part
         if 'file' not in request.files:
-            flash('No file part')
-            return render_template("error.html")
+            flash('No file part in request')
+            return redirect(url_for('edit'))
         
+        files = request.files.getlist('file')
+        
+        if len(files) == 0 or files[0].filename == '':
+            flash('No files selected for upload')
+            return redirect(url_for('edit'))
+        
+        processed_files = []
+        error_files = []
+        
+        for file in files:
+            try:
+                if file and allowed_file(file.filename):
+                    filename = secure_filename(file.filename)
+                    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                    file.save(file_path)
+                    
+                    processed_file = processImage(filename, format_conversion, image_processing)
+                    
+                    if processed_file:
+                        processed_files.append(processed_file)
+                    else:
+                        error_files.append(f"{filename} (processing failed)")
+                else:
+                    error_files.append(f"{file.filename} (invalid type)")
+            except Exception as e:
+                error_files.append(f"{file.filename} (error: {str(e)}")
+        
+        if error_files:
+            flash(f"Errors with {len(error_files)} file(s): {', '.join(error_files[:3])}{'...' if len(error_files) > 3 else ''}")
+        
+        if not processed_files:
+            flash('No files were processed successfully')
+            return redirect(url_for('edit'))
+        
+        if len(processed_files) == 1:
+            download_filename = os.path.basename(processed_files[0])
+            return send_file(
+                processed_files[0],
+                as_attachment=True,
+                download_name=download_filename,
+                mimetype='image/png'
+            )
+        else:
+            try:
+                temp_dir = tempfile.mkdtemp()
+                zip_path = os.path.join(temp_dir, 'processed_images.zip')
+                
+                with zipfile.ZipFile(zip_path, 'w') as zipf:
+                    for file_path in processed_files:
+                        zipf.write(file_path, os.path.basename(file_path))
+                
+                # Create a cleanup function
+                def cleanup():
+                    try:
+                        shutil.rmtree(temp_dir)
+                    except Exception as e:
+                        print(f"Cleanup error: {e}")
+                
+                # Send file with callback for cleanup
+                response = send_file(
+                    zip_path,
+                    as_attachment=True,
+                    download_name='processed_images.zip',
+                    mimetype='application/zip'
+                )
+                
+                # Set callback to run after response is sent
+                response.call_on_close(cleanup)
+                return response
+                
+            except Exception as e:
+                flash(f'Error creating zip file: {str(e)}')
+                return redirect(url_for('edit'))
         file = request.files['file']
         if file.filename == '':
             flash('No selected file')
@@ -221,7 +367,6 @@ def edit():
             return render_template("error.html")
             
     return render_template("index.html")
-
 @app.route("/usage")
 @login_required
 def usage():
@@ -236,4 +381,6 @@ def download(filename):
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
-    app.run(debug=True)  # Can specify the port too app.run(debug=True, port=5001)
+        os.makedirs('static', exist_ok=True)
+        os.makedirs('uploads', exist_ok=True)
+    app.run(debug=True)
