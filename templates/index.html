@@ -20,8 +20,10 @@
     <form action="/edit" method="post" enctype="multipart/form-data">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="mb-3">
+
             <label for="formFile" class="form-label my-2">Upload image(s) to edit</label>
-            <input class="form-control" type="file" name="file" id="formFile" multiple accept=".jpg, .jpeg, .png, .gif, .webp">
+            <input class="form-control" type="file" name="file" id="formFile" onchange="previewImage(event)"  multiple accept=".jpg, .jpeg, .png, .gif, .webp">
+            <img id="preview" src="#" alt="Image Preview" style="display:none; max-width:300px; margin-top:10px;"/>
             <div class="form-text text-muted">You can select multiple files by holding Ctrl (or Cmd on Mac) while clicking, or by dragging multiple files.</div>
         </div>
 
@@ -58,4 +60,18 @@
         <button type="submit" class="btn btn-success my-4">Submit</button>
     </form>
 </div>
+
+<script>
+function previewImage(event) {
+    const preview = document.getElementById('preview');
+    const file = event.target.files[0];
+    if (file) {
+        preview.src = URL.createObjectURL(file);
+        preview.style.display = 'block';
+    } else {
+        preview.src = '#';
+        preview.style.display = 'none';
+    }
+}
+</script>
 {% endblock %}
