@@ -59,117 +59,66 @@ def allowed_file(filename):
 
 def processImage(filename, format_conversion=None, image_processing=None):
     print(f"Format Conversion: {format_conversion}, Image Processing: {image_processing}, Filename: {filename}")
-    img = cv2.imread(f"uploads/{filename}")
     
+    input_path = os.path.join("uploads", filename)
+    img = cv2.imread(input_path)
+
     if img is None:
-        print(f"Failed to load image: uploads/{filename}")
+        print(f"Failed to load image: {input_path}")
         return None
 
-    if format_conversion:
-        match format_conversion:
-            case "cwebp":
-                newFilename = f"static/{filename.split('.')[0]}.webp"
-                cv2.imwrite(newFilename, img)
-                return newFilename
-            case "cpng":
-                newFilename = f"static/{filename.split('.')[0]}.png"
-                cv2.imwrite(newFilename, img)
-                return newFilename
-            case "cjpg":
-                newFilename = f"static/{filename.split('.')[0]}.jpg"
-                cv2.imwrite(newFilename, img)
-                return newFilename
-            case "cjpeg":
-                newFilename = f"static/{filename.split('.')[0]}.jpeg"
-                cv2.imwrite(newFilename, img)
-                return newFilename
+    file_base = os.path.splitext(filename)[0]
+    file_ext = os.path.splitext(filename)[1].lower().lstrip('.')
+    img_processed = img.copy()
 
-
-    output_dir = "static/uploads"
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-
-    base = filename.rsplit('.', 1)[0]
-    ext = filename.rsplit('.', 1)[1]
-
-    # 1. Apply image processing if selected
+    # Apply image processing
     if image_processing:
         match image_processing:
             case "cgray":
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                base += "_gray"
-                imgProcessed = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                newFilename = f"static/{filename}"
-                cv2.imwrite(newFilename, imgProcessed)
+                img_processed = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                file_base += "_gray"
             case "histeq":
-                imgGray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                imgProcessed = cv2.equalizeHist(imgGray)
-                newFilename = f"static/{filename.split('.')[0]}_histeq.png"
-                cv2.imwrite(newFilename, imgProcessed)
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                img = cv2.equalizeHist(img)
-                base += "_histeq"
+                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                img_processed = cv2.equalizeHist(gray)
+                file_base += "_histeq"
             case "blur":
-                imgProcessed = cv2.GaussianBlur(img, (5, 5), 0)
-                newFilename = f"static/{filename.split('.')[0]}_blurred.png"
-                cv2.imwrite(newFilename, imgProcessed)
-                img = cv2.GaussianBlur(img, (5, 5), 0)
-                base += "_blurred"
+                img_processed = cv2.GaussianBlur(img, (5, 5), 0)
+                file_base += "_blur"
             case "canny":
-                imgProcessed = cv2.Canny(img, 100, 200)
-                newFilename = f"static/{filename.split('.')[0]}_edges.png"
-                cv2.imwrite(newFilename, imgProcessed)
-                img = cv2.Canny(img, 100, 200)
-                base += "_edges"
+                img_processed = cv2.Canny(img, 100, 200)
+                file_base += "_edges"
             case "rotate":
-                img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
-                base += "_rotated"
-                imgProcessed = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
-                newFilename = f"static/{filename.split('.')[0]}_rotated.png"
-                cv2.imwrite(newFilename, imgProcessed)
+                img_processed = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
+                file_base += "_rotated"
             case "sharpen":
                 kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
-                imgProcessed = cv2.filter2D(img, -1, kernel)
-                newFilename = f"static/{filename.split('.')[0]}_sharpened.png"
-                cv2.imwrite(newFilename, imgProcessed)
+                img_processed = cv2.filter2D(img, -1, kernel)
+                file_base += "_sharpened"
 
-    file_format = filename.rsplit('.', 1)[1].lower()
-    new_format = file_format
+    # Set new format extension
+    ext_map = {
+        "cwebp": "webp",
+        "cpng": "png",
+        "cjpg": "jpg",
+        "cjpeg": "jpeg"
+    }
+    output_ext = ext_map.get(format_conversion, file_ext)
 
-    # Handle Format Conversions Simultaneously also if required by user
-    if format_conversion:
-        if format_conversion == "cwebp":
-            new_format= "webp"
-        elif format_conversion == "cpng":
-            new_format = "png"
-        elif format_conversion == "cjpg":
-            new_format = "jpg"
-        elif format_conversion == "cjpeg":
-            new_format = "jpeg"
+    # Ensure output folder exists
+    output_dir = os.path.join("static", "uploads")
+    os.makedirs(output_dir, exist_ok=True)
 
-    # --- Final output filename ---
-    newFilename = f"static/{file_base}_processed.{new_format}"
-    cv2.imwrite(newFilename, imgProcessed)
-    return newFilename
-                img = cv2.filter2D(img, -1, kernel)
-                base += "_sharpened"
+    # Compose output file path
+    new_filename = f"{file_base}_processed.{output_ext}"
+    output_path = os.path.join(output_dir, new_filename)
 
-    # 2. Apply format conversion if selected
-    if format_conversion:
-        match format_conversion:
-            case "cwebp":
-                ext = "webp"
-            case "cpng":
-                ext = "png"
-            case "cjpg":
-                ext = "jpg"
-            case "cjpeg":
-                ext = "jpeg"
+    # Save final processed image
+    success = cv2.imwrite(output_path, img_processed)
+    if not success:
+        print(f"Failed to write image to {output_path}")
+        return None
 
-    # 3. Save the final image
-    newFilename = f"{output_dir}/{base}.{ext}"
-    cv2.imwrite(newFilename, img)
-    return newFilename
+    return output_path
 
 @app.route("/")
 def home():
