@@ -187,135 +187,107 @@ def about():
 @login_required
 def edit():
     if request.method == 'POST':
-        # Handle annotation submission
+        # Annotation handling
         if 'annotated_image' in request.form and request.form['annotated_image']:
             data_url = request.form['annotated_image']
-            original_filename = request.form['original_filename']  # Always the true original
-            edited_filename = request.form['edited_filename']      # The current edited image
+            original_filename = request.form['original_filename']
+            edited_filename = request.form['edited_filename']
 
-            # Decode base64 image
             header, encoded = data_url.split(",", 1)
             data = base64.b64decode(encoded)
             img = Image.open(BytesIO(data))
-            # Save annotated image (always create a new file)
+
             annotated_path = os.path.join("static", "uploads", "annotated_" + os.path.basename(edited_filename))
             img.save(annotated_path)
+
             return render_template(
                 "preview.html",
-                original_filename=original_filename,  # Always show the true original
+                original_filename=original_filename,
                 edited_filename=os.path.relpath(annotated_path, "static").replace("\\", "/")
             )
+
         format_conversion = request.form.get("format_conversion")
         image_processing = request.form.get("image_processing")
 
         if 'file' not in request.files:
             flash('No file part in request')
             return redirect(url_for('edit'))
-        
+
         files = request.files.getlist('file')
-        
-        if len(files) == 0 or files[0].filename == '':
-            flash('No files selected for upload')
+
+        if not files or files[0].filename == '':
+            flash('No files selected')
             return redirect(url_for('edit'))
-        
+
         processed_files = []
         error_files = []
-        
+
         for file in files:
             try:
                 if file and allowed_file(file.filename):
                     filename = secure_filename(file.filename)
                     file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
                     file.save(file_path)
-                    
-                    processed_file = processImage(filename, format_conversion, image_processing)
-                    
-                    if processed_file:
-                        processed_files.append(processed_file)
+
+                    processed_path = processImage(filename, format_conversion, image_processing)
+                    if processed_path:
+                        processed_files.append((filename, processed_path))
                     else:
                         error_files.append(f"{filename} (processing failed)")
                 else:
-                    error_files.append(f"{file.filename} (invalid type)")
+                    error_files.append(f"{file.filename} (invalid file)")
             except Exception as e:
-                error_files.append(f"{file.filename} (error: {str(e)}")
-        
-        if error_files:
-            flash(f"Errors with {len(error_files)} file(s): {', '.join(error_files[:3])}{'...' if len(error_files) > 3 else ''}")
-        
-        if not processed_files:
-            flash('No files were processed successfully')
-            return redirect(url_for('edit'))
-        
-        if len(processed_files) == 1:
-            download_filename = os.path.basename(processed_files[0])
-            return send_file(
-                processed_files[0],
-                as_attachment=True,
-                download_name=download_filename,
-                mimetype='image/png'
-            )
-        else:
-            try:
-                temp_dir = tempfile.mkdtemp()
-                zip_path = os.path.join(temp_dir, 'processed_images.zip')
-                
-                with zipfile.ZipFile(zip_path, 'w') as zipf:
-                    for file_path in processed_files:
-                        zipf.write(file_path, os.path.basename(file_path))
-                
-                # Create a cleanup function
-                def cleanup():
-                    try:
-                        shutil.rmtree(temp_dir)
-                    except Exception as e:
-                        print(f"Cleanup error: {e}")
-                
-                # Send file with callback for cleanup
-                response = send_file(
-                    zip_path,
-                    as_attachment=True,
-                    download_name='processed_images.zip',
-                    mimetype='application/zip'
-                )
-                
-                # Set callback to run after response is sent
-                response.call_on_close(cleanup)
-                return response
-                
-            except Exception as e:
-                flash(f'Error creating zip file: {str(e)}')
-                return redirect(url_for('edit'))
-        file = request.files['file']
-        if file.filename == '':
-            flash('No selected file')
-            return render_template("error.html")
-        elif file and allowed_file(file.filename):
-            filename = secure_filename(file.filename)
-            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-            processed_file = processImage(filename, format_conversion, image_processing)
-            
-            if processed_file:
-                # Always copy uploaded file to static/uploads for preview
-                import shutil
-                original_path = os.path.join('static', 'uploads', filename)
-                uploaded_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                shutil.copy(uploaded_path, original_path)  # Overwrite every time
+                error_files.append(f"{file.filename} (error: {str(e)})")
 
-                original_filename = f"uploads/{filename}".replace("\\", "/")
-                edited_filename = os.path.relpath(processed_file, 'static').replace("\\", "/")
-                return render_template(
-                    "preview.html",
-                    original_filename=original_filename,
-                    edited_filename=edited_filename
-                )
-            else:
-                flash('Error processing image')
-                return render_template("error.html")
+        if error_files:
+            flash(f"Errors: {', '.join(error_files[:3])}{'...' if len(error_files) > 3 else ''}")
+
+        if not processed_files:
+            flash("No files processed")
+            return redirect(url_for("edit"))
+
+        # Handle single image preview
+        if len(processed_files) == 1:
+            filename, processed_file = processed_files[0]
+            original_path = os.path.join('static', 'uploads', filename)
+            uploaded_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            shutil.copy(uploaded_path, original_path)
+
+            original_filename = f"uploads/{filename}".replace("\\", "/")
+            edited_filename = os.path.relpath(processed_file, 'static').replace("\\", "/")
+
+            return render_template(
+                "preview.html",
+                original_filename=original_filename,
+                edited_filename=edited_filename
+            )
+
+        # Handle multiple files: zip download
         else:
-            flash('File type not allowed. Please upload an image file.')
-            return render_template("error.html")
-            
+            temp_dir = tempfile.mkdtemp()
+            zip_path = os.path.join(temp_dir, "processed_images.zip")
+
+            with zipfile.ZipFile(zip_path, 'w') as zipf:
+                for _, file_path in processed_files:
+                    zipf.write(file_path, os.path.basename(file_path))
+
+            def cleanup():
+                try:
+                    shutil.rmtree(temp_dir)
+                except Exception as e:
+                    print(f"Cleanup error: {e}")
+
+            response = send_file(
+                zip_path,
+                as_attachment=True,
+                download_name="processed_images.zip",
+                mimetype="application/zip"
+            )
+            response.call_on_close(cleanup)
+            return response
+
     return render_template("index.html")
+
 @app.route("/usage")
 @login_required
 def usage():

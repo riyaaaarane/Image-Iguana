@@ -32,6 +32,16 @@
             </form>
         </div>
     </div>
+
+    <!-- 🆕 Preview Section Added Below -->
+    <div class="mt-5 text-center" id="annotated-preview-section" style="display: none;">
+        <h5>Preview of Annotated Image</h5>
+        <img id="annotated-preview-img" src="" alt="Annotated Preview" style="max-width: 100%; border: 2px solid #1ecd97; border-radius: 10px;">
+        <div class="mt-3">
+            <button onclick="submitAnnotated()" class="btn btn-success my-4" style="width: 150px; padding: 10px 0; border-radius: 50px; font-size: 14px;">Submit</button>
+        </div>
+    </div>
+
     <a id="download-btn" href="{{ url_for('download', filename=edited_filename) }}" class="btn btn-success mt-4" download>Download Edited Image</a>
 </div>
 <script>
@@ -97,6 +107,27 @@ function saveAnnotated() {
     tempCtx.drawImage(canvas, 0, 0);
     const dataURL = tempCanvas.toDataURL('image/png');
     document.getElementById('annotated_image').value = dataURL;
+    document.getElementById('annotate-form').submit();
+
+     // Show preview
+    const previewSection = document.getElementById('annotated-preview-section');
+    const previewImg = document.getElementById('annotated-preview-img');
+    previewImg.src = dataURL;
+    previewSection.style.display = 'block';
+
+    <div class="text-center mt-4">
+        <a href="{{ url_for('download', filename=edited_filename) }}" class="btn btn-success me-3">
+             Download Edited Image</a>
+             <a href="{{ url_for('edit') }}" class="btn btn-outline-secondary"> Back to Edit Page</a>
+    </div>
+
+
+    // Store for submission
+    document.getElementById('annotated_image').value = dataURL;
+}
+
+// Final submission after preview confirmed
+function submitAnnotated() {
     document.getElementById('annotate-form').submit();
 }
 
